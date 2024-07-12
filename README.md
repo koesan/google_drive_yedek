@@ -1,2 +1,2 @@
 # google_drive_yedek
-Google drive'da yedek işlemlerini otomatik geliştirmeni sağlayan bir proje
+Google drive'da yedek işlemlerini otomatik yapmanı sağlayan bir proje
