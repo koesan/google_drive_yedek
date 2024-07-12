@@ -4,5 +4,5 @@ Bu proje, Google Drive'da dosya ve klasör yönetimini kolaylaştırmak için ç
 
 * Gereksinimler
 
-'pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client tqdm'
+' pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client tqdm '
 
