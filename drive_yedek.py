@@ -8,8 +8,8 @@ from tqdm import tqdm  # İlerleme çubuğu için tqdm kütüphanesi eklendi
 
 # Google Drive API kapsamlarını ve servis hesap dosyasının yolunu tanımlayın
 SCOPES = ['https://www.googleapis.com/auth/drive']
-SERVICE_ACCOUNT_FILE = "/home/koesan/İndirilenler/tough-diagram-429202-r2-cf3eacdab3e1.json"
-parent_folder_id = "189LN6JXG9DssV9iefs-Pza4inXNLJDS8"
+SERVICE_ACCOUNT_FILE = ".json" # JSON Dosya yolu 
+parent_folder_id = "" # Parent Folder ID
 
 # Servis hesap dosyasını kullanarak kimlik bilgilerini oluşturun
 credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
@@ -242,7 +242,7 @@ def select_and_download_item(folder_id, local_folder_path):
         print("Geçersiz seçim. Hiçbir dosya veya klasör indirilmedi.")
 
 if __name__ == '__main__':
-
+    Path = ""# Yedeklenmek istenen klasör yolu
     print("1.Yedekleri Listele")
     print("2.Yedek Sil")
     print("3.Yedek Al")
@@ -255,8 +255,8 @@ if __name__ == '__main__':
     elif choice =="2":
         delete_files_in_folder(parent_folder_id)
     elif choice =="3":
-        upload_directory("/home/koesan/Müzik", parent_folder_id)
+        upload_directory(Path, parent_folder_id) # Yedeklenmek istenen klasör yolu
     elif choice == "4":
-        select_and_download_item(parent_folder_id,"/home/koesan/İndirilenler")
+        select_and_download_item(parent_folder_id,Path)# Yedeklenmek istenen klasör yolu
     else:
         print("Geçersiz seçim.")
