@@ -1,262 +1,237 @@
-import os
+# Improved Google Drive Backup CLI with richer terminal feedback
+from __future__ import annotations
+
 import io
-from datetime import datetime
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Tuple
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from tqdm import tqdm  # İlerleme çubuğu için tqdm kütüphanesi eklendi
+from rich import print
+from rich.console import Console
+from rich.prompt import Prompt
+from rich.progress import (
+    Progress,
+    BarColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
+from rich.table import Table
+from rich.panel import Panel
 
-# Google Drive API kapsamlarını ve servis hesap dosyasının yolunu tanımlayın
-SCOPES = ['https://www.googleapis.com/auth/drive']
-SERVICE_ACCOUNT_FILE = ".json" # JSON Dosya yolu 
-parent_folder_id = "" # Parent Folder ID
+# -----------------------------------------------------------
+# Settings
+# -----------------------------------------------------------
+SCOPES = ["https://www.googleapis.com/auth/drive"]
+SERVICE_ACCOUNT_FILE = "astute-citadel-453510-d7-7175b255da8d.json"
+PARENT_FOLDER_ID = "1iTZTWWOuOnPxqfacRrs9awLFXOMsEtU-"
 
-# Servis hesap dosyasını kullanarak kimlik bilgilerini oluşturun
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+DEFAULT_DIRS = [
+    "Belgeler",
+    "İndirilenler",
+    "Masaüstü",
+    "Müzik",
+    "Resimler",
+    "Şablonlar",
+    "Videolar",
+]
 
-# Google Drive servisini oluşturun
-drive_service = build('drive', 'v3', credentials=credentials)
+console = Console()
 
-def delete_files_in_folder(folder_id):
-    """Belirtilen klasördeki dosyaları ve klasörleri listeleyip kullanıcı seçimlerine göre silme işlemi yapar."""
-    results = drive_service.files().list(
-        q=f"'{folder_id}' in parents and trashed=false",
-        pageSize=1000,
-        fields="nextPageToken, files(id, name, mimeType)"
-    ).execute()
-    items = results.get('files', [])
+# -----------------------------------------------------------
+# Google Drive
+# -----------------------------------------------------------
+credentials = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+)
+drive_service = build("drive", "v3", credentials=credentials, cache_discovery=False)
 
-    if not items:
-        print("Klasörde dosya veya klasör bulunamadı.")
+# -----------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------
+
+def _create_folder(name: str, parents: List[str] | None = None) -> str:
+    body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
+    if parents:
+        body["parents"] = parents
+    return (
+        drive_service.files().create(body=body, fields="id").execute()["id"]
+    )
+
+def _list_children(folder_id: str) -> List[dict]:
+    return (
+        drive_service.files()
+        .list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            pageSize=1000,
+            fields="files(id,name,mimeType,size)",
+        )
+        .execute()
+        .get("files", [])
+    )
+
+# -----------------------------------------------------------
+# Core functions
+# -----------------------------------------------------------
+
+def _gather_files(targets: List[Path]) -> List[Tuple[Path, str]]:
+    """Return all files that will be uploaded together with their intended upload path."""
+    uploads: List[Tuple[Path, str]] = []
+    for base in targets:
+        if not base.exists():
+            console.print(f"[yellow]Atlandı:[/] {base} bulunamadı")
+            continue
+        for root, _, files in os.walk(base):
+            for f in files:
+                uploads.append((Path(root) / f, base.name))
+    return uploads
+
+def _human_bytes(num: int) -> str:
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if num < 1024:
+            return f"{num:.1f} {unit}"
+        num /= 1024
+    return f"{num:.1f} PB"
+
+def backup(target: Path | None):
+    targets = [target] if target else [Path.home() / d for d in DEFAULT_DIRS]
+
+    # ------------------------------------------------------------------
+    # 1️⃣ Scan phase
+    # ------------------------------------------------------------------
+    console.print(Panel("[bold cyan]Dosyalar taranıyor...[/]", expand=False))
+    uploads = _gather_files(targets)
+    total_size = sum(f.stat().st_size for f, _ in uploads)
+    console.print(
+        f"[green]Bulunan dosya:[/] {len(uploads)} | [green]Toplam boyut:[/] {_human_bytes(total_size)}"
+    )
+
+    if not uploads:
+        console.print("[red]Yedeklenecek dosya bulunamadı!")
         return
 
-    # Tüm dosya ve klasörleri listele
-    print("Klasördeki dosyalar ve klasörler:")
-    for idx, item in enumerate(items, start=1):
-        if item['mimeType'] == 'application/vnd.google-apps.folder':
-            print(f"{idx}. [Klasör] {item['name']} (ID: {item['id']})")
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_root_id = _create_folder(ts, [PARENT_FOLDER_ID])
+
+    # Önce klasör yapısını oluştur
+    folder_cache: dict[str, str] = {}
+    for _, base_name in uploads:
+        if base_name not in folder_cache:
+            folder_cache[base_name] = _create_folder(base_name, [backup_root_id])
+
+    # ------------------------------------------------------------------
+    # 2️⃣ Upload phase
+    # ------------------------------------------------------------------
+    console.print(Panel("[bold cyan]Yükleme başlıyor...[/]", expand=False))
+
+    with Progress(
+        TextColumn("{task.description}"),
+        BarColumn(),
+        "{task.percentage:3.0f}%",
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as prog:
+        task = prog.add_task("Dosyalar yükleniyor", total=total_size)
+        for fpath, base_name in uploads:
+            pid = folder_cache[base_name]
+            meta = {"name": fpath.name, "parents": [pid]}
+            media = MediaFileUpload(str(fpath), resumable=True)
+            req = drive_service.files().create(body=meta, media_body=media)
+            response = None
+            while response is None:
+                status, response = req.next_chunk()
+                if status:
+                    prog.update(task, advance=status.resumable_progress)
+            # finalize any leftover
+            prog.update(task, advance=media.size() - prog.tasks[0].completed)
+
+    console.print("[bold green]✔ Yedekleme tamamlandı")
+
+def list_backups() -> List[dict]:
+    backups = sorted(_list_children(PARENT_FOLDER_ID), key=lambda x: x["name"], reverse=True)
+    table = Table(title="Mevcut Yedekler")
+    table.add_column("#", justify="right")
+    table.add_column("ID")
+    table.add_column("Ad")
+    for i, item in enumerate(backups, 1):
+        table.add_row(str(i), item["id"], item["name"])
+    console.print(table)
+    return backups
+
+def _download_file(fid: str, dest: Path):
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    request = drive_service.files().get_media(fileId=fid)
+    with io.FileIO(dest, "wb") as fh:
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+            if status:
+                pass  # Could add progress here if desired
+
+def _download_folder(fid: str, dest: Path):
+    for item in _list_children(fid):
+        if item["mimeType"].endswith("folder"):
+            _download_folder(item["id"], dest / item["name"])
         else:
-            print(f"{idx}. [Dosya] {item['name']} (ID: {item['id']})")
+            _download_file(item["id"], dest / item["name"])
 
-    print(f"{len(items) + 1}. Hepsini Sil")
-    choice = int(input("Silmek istediğiniz dosya veya klasör numarasını seçin: "))
+def download(backup_id: str):
+    dest = Path("downloads") / backup_id
+    console.print(f"[cyan]İndiriliyor →[/] {dest}")
+    _download_folder(backup_id, dest)
+    console.print("[bold green]✔ İndirme tamamlandı")
 
-    if choice == len(items) + 1:
-        for item in items:
-            if item['mimeType'] == 'application/vnd.google-apps.folder':
-                delete_folder_contents(item['id'])
-            try:
-                drive_service.files().delete(fileId=item['id']).execute()
-                print(f"Başarıyla silindi: ID: {item['id']}, İsim: {item['name']}")
-            except Exception as e:
-                print(f"Silme hatası: ID: {item['id']}, İsim: {item['name']}")
-                print(f"Hata detayları: {str(e)}")
-    elif 1 <= choice <= len(items):
-        item_to_delete = items[choice - 1]
-        if item_to_delete['mimeType'] == 'application/vnd.google-apps.folder':
-            delete_folder_contents(item_to_delete['id'])
-        try:
-            drive_service.files().delete(fileId=item_to_delete['id']).execute()
-            print(f"Başarıyla silindi: ID: {item_to_delete['id']}, İsim: {item_to_delete['name']}")
-        except Exception as e:
-            print(f"Silme hatası: ID: {item_to_delete['id']}, İsim: {item_to_delete['name']}")
-            print(f"Hata detayları: {str(e)}")
-    else:
-        print("Geçersiz seçim. Hiçbir dosya veya klasör silinmedi.")
 
-def list_files_in_folder(folder_id):
-    """Belirtilen klasördeki dosyaları ve doğrudan alt klasörleri listeleyen fonksiyon."""
-    # Klasördeki dosya ve klasörleri listele
-    results = drive_service.files().list(
-        q=f"'{folder_id}' in parents and trashed=false",
-        pageSize=1000,
-        fields="nextPageToken, files(id, name, mimeType)"
-    ).execute()
-    items = results.get('files', [])
+def delete(backup_id: str):
+    drive_service.files().delete(fileId=backup_id).execute()
+    console.print("[red]❌ Yedek silindi")
 
-    if not items:
-        print("Klasörde dosya veya klasör bulunamadı.")
-        return
+# -----------------------------------------------------------
+# Menu loop
+# -----------------------------------------------------------
 
-    print("Klasördeki dosyalar ve klasörler:")
-    for idx, item in enumerate(items, start=1):
-        if item['mimeType'] == 'application/vnd.google-apps.folder':
-            print(f"{idx}. [Klasör] {item['name']} (ID: {item['id']})")
-        else:
-            print(f"{idx}. [Dosya] {item['name']} (ID: {item['id']})")
+def main():
+    while True:
+        console.print("\n[bold]Google Drive Yedek Aracı[/]")
+        console.print("1) Yedekle\n2) Yedekleri Listele\n3) Yedek İndir\n4) Yedek Sil\nq) Çık")
+        choice = Prompt.ask("Seçiminiz", choices=["1", "2", "3", "4", "q"], default="q")
 
-def delete_folder_contents(folder_id):
-    """Belirtilen klasördeki tüm dosyaları ve alt klasörleri recursively (özyinelemeli olarak) siler."""
-    results = drive_service.files().list(
-        q=f"'{folder_id}' in parents and trashed=false",
-        pageSize=1000,
-        fields="nextPageToken, files(id, name, mimeType)"
-    ).execute()
-    items = results.get('files', [])
+        if choice == "1":
+            path_str = Prompt.ask(
+                "Yedeklenecek dizin (boş ⇒ varsayılan klasörler)", default=""
+            )
+            
+            backup(Path(path_str).expanduser() if path_str else None)
+        
+        elif choice == "2":            
+            list_backups()
 
-    with tqdm(total=len(items), desc="Alt klasörler ve dosyalar siliniyor", unit="öğe") as pbar:
-        for item in items:
-            if item['mimeType'] == 'application/vnd.google-apps.folder':
-                delete_folder_contents(item['id'])
-            try:
-                drive_service.files().delete(fileId=item['id']).execute()
-                pbar.update(1)
-            except Exception as e:
-                pass  # Hatalar basılmıyor, yalnızca ilerleme çubuğu güncelleniyor
+        elif choice == "3":
+            backups = list_backups()
+            idx = Prompt.ask("İndirilecek # veya ID", default="")
+            bid = backups[int(idx) - 1]["id"] if idx.isdigit() else idx
+            download(bid)
 
-def create_folder(folder_name, parent_folder_id=None):
-    """Google Drive'da bir klasör oluşturur ve oluşturulan klasörün ID'sini döner."""
-    folder_metadata = {
-        'name': folder_name,
-        "mimeType": "application/vnd.google-apps.folder",
-        'parents': [parent_folder_id] if parent_folder_id else []
-    }
+        elif choice == "4":
+            backups = list_backups()
+            idx = Prompt.ask("Silinecek # veya ID", default="")
+            bid = backups[int(idx) - 1]["id"] if idx.isdigit() else idx
+            delete(bid)
+        
+        else:  # q
+            break
 
-    created_folder = drive_service.files().create(
-        body=folder_metadata,
-        fields='id'
-    ).execute()
-
-    print(f'Klasör oluşturuldu: ID: {created_folder["id"]}')
-    return created_folder["id"]
-
-def upload_directory(local_directory, parent_folder_id):
-    """Bir yerel dizini ve içeriğini Google Drive'a yükler."""
-    # Güncel tarih ve saati al
-    current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    
-    # Güncel tarih ve saati kullanarak bir klasör oluştur
-    date_folder_id = create_folder(current_datetime, parent_folder_id)
-    
-    files_to_upload = []
-    for root, dirs, files in os.walk(local_directory):
-        # Google Drive'da karşılık gelen klasörü oluştur
-        relative_path = os.path.relpath(root, local_directory)
-        drive_folder_id = date_folder_id
-
-        if relative_path != ".":
-            # Google Drive'da bir alt klasör oluştur
-            drive_folder_id = create_folder(relative_path, date_folder_id)
-
-        # Mevcut dizindeki dosyaları toplama
-        for file_name in files:
-            files_to_upload.append((os.path.join(root, file_name), drive_folder_id, file_name))
-
-    # Yükleme ilerleme çubuğunu başlat
-    with tqdm(total=len(files_to_upload), desc="Dosyalar yükleniyor", unit="dosya") as pbar:
-        for file_path, folder_id, file_name in files_to_upload:
-            file_metadata = {
-                'name': file_name,
-                'parents': [folder_id]
-            }
-            media = MediaFileUpload(file_path)
-            try:
-                drive_service.files().create(body=file_metadata, media_body=media).execute()
-                pbar.update(1)
-            except Exception as e:
-                print(f"Yükleme hatası: {file_name}")
-                print(f"Hata detayları: {str(e)}")
-
-def download_files_from_folder(folder_id, local_folder_path):
-    """Belirtilen Google Drive klasöründeki dosyaları ve alt klasörleri yerel bir klasöre indirir."""
-    if not os.path.exists(local_folder_path):
-        os.makedirs(local_folder_path)
-
-    results = drive_service.files().list(
-        q=f"'{folder_id}' in parents and trashed=false",
-        pageSize=1000,
-        fields="nextPageToken, files(id, name, mimeType)"
-    ).execute()
-    items = results.get('files', [])
-
-    if not items:
-        print("Klasörde dosya veya klasör bulunamadı.")
-        return
-
-    with tqdm(total=len(items), desc="Dosyalar ve alt klasörler indiriliyor", unit="öğe") as pbar:
-        for item in items:
-            file_id = item['id']
-            file_name = item['name']
-            file_path = os.path.join(local_folder_path, file_name)
-
-            if item['mimeType'] == 'application/vnd.google-apps.folder':
-                # Alt klasörü indir
-                download_files_from_folder(file_id, file_path)
-            else:
-                # Dosyayı indir
-                request = drive_service.files().get_media(fileId=file_id)
-                with io.FileIO(file_path, 'wb') as fh:
-                    downloader = MediaIoBaseDownload(fh, request)
-                    done = False
-                    while not done:
-                        status, done = downloader.next_chunk()
-                pbar.update(1)
-
-def select_and_download_item(folder_id, local_folder_path):
-    """Belirtilen Google Drive klasöründeki dosya ve klasörleri listeleyip, kullanıcıdan seçim yaparak indirir."""
-    results = drive_service.files().list(
-        q=f"'{folder_id}' in parents and trashed=false",
-        pageSize=1000,
-        fields="nextPageToken, files(id, name, mimeType)"
-    ).execute()
-    items = results.get('files', [])
-
-    if not items:
-        print("Klasörde dosya veya klasör bulunamadı.")
-        return
-
-    # Klasör ve dosyaları listele
-    print("Klasördeki dosyalar ve klasörler:")
-    for idx, item in enumerate(items, start=1):
-        if item['mimeType'] == 'application/vnd.google-apps.folder':
-            print(f"{idx}. [Klasör] {item['name']} (ID: {item['id']})")
-        else:
-            print(f"{idx}. [Dosya] {item['name']} (ID: {item['id']})")
-
-    print(f"{len(items) + 1}. Hepsini İndir")
-    choice = int(input("İndirmek istediğiniz dosya veya klasör numarasını seçin: "))
-
-    if choice == len(items) + 1:
-        # Tüm dosya ve klasörleri indir
-        download_files_from_folder(folder_id, local_folder_path)
-    elif 1 <= choice <= len(items):
-        item_to_download = items[choice - 1]
-        item_id = item_to_download['id']
-        item_name = item_to_download['name']
-        item_path = os.path.join(local_folder_path, item_name)
-
-        if item_to_download['mimeType'] == 'application/vnd.google-apps.folder':
-            # Seçilen klasörü indir
-            download_files_from_folder(item_id, item_path)
-        else:
-            # Seçilen dosyayı indir
-            request = drive_service.files().get_media(fileId=item_id)
-            with io.FileIO(item_path, 'wb') as fh:
-                downloader = MediaIoBaseDownload(fh, request)
-                done = False
-                while not done:
-                    status, done = downloader.next_chunk()
-            print(f"Dosya indirildi: {item_name}")
-
-    else:
-        print("Geçersiz seçim. Hiçbir dosya veya klasör indirilmedi.")
-
-if __name__ == '__main__':
-    Path = ""# Yedeklenmek istenen klasör yolu
-    print("1.Yedekleri Listele")
-    print("2.Yedek Sil")
-    print("3.Yedek Al")
-    print("4.Yedeği İndir")
-    print("5.Dosya veya Klasör Seçip İndir")
-    choice = input("Yapılacak İşlem:")
-
-    if choice=="1":
-        list_files_in_folder(parent_folder_id)
-    elif choice =="2":
-        delete_files_in_folder(parent_folder_id)
-    elif choice =="3":
-        upload_directory(Path, parent_folder_id) # Yedeklenmek istenen klasör yolu
-    elif choice == "4":
-        select_and_download_item(parent_folder_id,Path)# Yedeklenmek istenen klasör yolu
-    else:
-        print("Geçersiz seçim.")
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[red]İptal edildi[/]")
