@@ -1,9 +1,11 @@
-# Improved Google Drive Backup CLI with richer terminal feedback
 from __future__ import annotations
 
 import io
 import os
 import sys
+import zipfile
+import tempfile
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple
@@ -99,11 +101,76 @@ def _human_bytes(num: int) -> str:
         num /= 1024
     return f"{num:.1f} PB"
 
+def _compress_files(uploads: List[Tuple[Path, str]], ts: str) -> Path:
+    """
+    Dosyaları ZIP formatında sıkıştırır ve geçici dosyanın yolunu döndürür
+    """
+    # Geçici klasör oluştur
+    temp_dir = Path(tempfile.mkdtemp())
+    
+    # Her dosyayı orijinal klasör yapısıyla geçici dizine kopyala
+    with Progress(
+        TextColumn("{task.description}"),
+        BarColumn(),
+        "{task.percentage:3.0f}%",
+        TimeElapsedColumn(),
+        console=console,
+    ) as prog:
+        copy_task = prog.add_task("Dosyalar kopyalanıyor", total=len(uploads))
+        
+        for src_file, base_name in uploads:
+            # Hedef klasör yolu
+            dest_folder = temp_dir / base_name / src_file.parent.relative_to(src_file.parts[0])
+            dest_folder.mkdir(parents=True, exist_ok=True)
+            
+            # Dosyayı kopyala
+            dest_file = dest_folder / src_file.name
+            shutil.copy2(src_file, dest_file)
+            
+            prog.update(copy_task, advance=1)
+    
+    # ZIP dosya adı
+    zip_filename = f"backup_{ts}.zip"
+    zip_filepath = temp_dir / zip_filename
+    
+    # Dosyaları sıkıştır
+    total_size = sum(f.stat().st_size for f, _ in uploads)
+    
+    with Progress(
+        TextColumn("{task.description}"),
+        BarColumn(),
+        "{task.percentage:3.0f}%",
+        TimeElapsedColumn(),
+        console=console,
+    ) as prog:
+        zip_task = prog.add_task("Dosyalar sıkıştırılıyor", total=total_size)
+        
+        with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Geçici dizindeki her klasörü (temel klasörleri) ayrı ayrı ekle
+            for folder in temp_dir.iterdir():
+                if folder.is_dir() and folder.name in [base for _, base in uploads]:
+                    folder_size = 0
+                    for root, _, files in os.walk(folder):
+                        for file in files:
+                            file_path = Path(root) / file
+                            folder_size += file_path.stat().st_size
+                    
+                    # Klasördeki dosyaları sıkıştır
+                    for root, _, files in os.walk(folder):
+                        for file in files:
+                            file_path = Path(root) / file
+                            # zipfile içindeki yolu, temp_dir'i çıkararak oluştur
+                            arc_name = str(file_path.relative_to(temp_dir))
+                            zipf.write(file_path, arc_name)
+                            prog.update(zip_task, advance=file_path.stat().st_size)
+    
+    return zip_filepath
+
 def backup(target: Path | None):
     targets = [target] if target else [Path.home() / d for d in DEFAULT_DIRS]
 
     # ------------------------------------------------------------------
-    # 1️⃣ Scan phase
+    # 1️ Scan phase
     # ------------------------------------------------------------------
     console.print(Panel("[bold cyan]Dosyalar taranıyor...[/]", expand=False))
     uploads = _gather_files(targets)
@@ -116,20 +183,25 @@ def backup(target: Path | None):
         console.print("[red]Yedeklenecek dosya bulunamadı!")
         return
 
+    # Timestamp oluştur
     ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
-    backup_root_id = _create_folder(ts, [PARENT_FOLDER_ID])
-
-    # Önce klasör yapısını oluştur
-    folder_cache: dict[str, str] = {}
-    for _, base_name in uploads:
-        if base_name not in folder_cache:
-            folder_cache[base_name] = _create_folder(base_name, [backup_root_id])
-
+    
     # ------------------------------------------------------------------
-    # 2️⃣ Upload phase
+    # 2️ Compress phase
+    # ------------------------------------------------------------------
+    console.print(Panel("[bold cyan]Dosyalar sıkıştırılıyor...[/]", expand=False))
+    zip_file = _compress_files(uploads, ts)
+    
+    console.print(f"[green]Sıkıştırılmış dosya:[/] {zip_file.name} | [green]Boyut:[/] {_human_bytes(zip_file.stat().st_size)}")
+    
+    # ------------------------------------------------------------------
+    # 3️ Upload phase
     # ------------------------------------------------------------------
     console.print(Panel("[bold cyan]Yükleme başlıyor...[/]", expand=False))
-
+    
+    # Drive'da klasör oluştur
+    backup_root_id = _create_folder(ts, [PARENT_FOLDER_ID])
+    
     with Progress(
         TextColumn("{task.description}"),
         BarColumn(),
@@ -139,20 +211,29 @@ def backup(target: Path | None):
         TimeElapsedColumn(),
         console=console,
     ) as prog:
-        task = prog.add_task("Dosyalar yükleniyor", total=total_size)
-        for fpath, base_name in uploads:
-            pid = folder_cache[base_name]
-            meta = {"name": fpath.name, "parents": [pid]}
-            media = MediaFileUpload(str(fpath), resumable=True)
-            req = drive_service.files().create(body=meta, media_body=media)
-            response = None
-            while response is None:
-                status, response = req.next_chunk()
-                if status:
-                    prog.update(task, advance=status.resumable_progress)
-            # finalize any leftover
-            prog.update(task, advance=media.size() - prog.tasks[0].completed)
-
+        task = prog.add_task("ZIP dosyası yükleniyor", total=zip_file.stat().st_size)
+        
+        # ZIP dosyasını yükle
+        meta = {"name": zip_file.name, "parents": [backup_root_id]}
+        media = MediaFileUpload(str(zip_file), resumable=True)
+        req = drive_service.files().create(body=meta, media_body=media)
+        
+        response = None
+        while response is None:
+            status, response = req.next_chunk()
+            if status:
+                prog.update(task, advance=status.resumable_progress)
+                
+        # Finalize any leftover
+        prog.update(task, advance=media.size() - prog.tasks[0].completed)
+    
+    # Geçici dosyaları temizle
+    try:
+        shutil.rmtree(zip_file.parent)
+        console.print("[cyan]Geçici dosyalar temizlendi[/]")
+    except Exception as e:
+        console.print(f"[yellow]Geçici dosyalar temizlenirken hata: {e}[/]")
+    
     console.print("[bold green]✔ Yedekleme tamamlandı")
 
 def list_backups() -> List[dict]:
@@ -189,7 +270,6 @@ def download(backup_id: str):
     console.print(f"[cyan]İndiriliyor →[/] {dest}")
     _download_folder(backup_id, dest)
     console.print("[bold green]✔ İndirme tamamlandı")
-
 
 def delete(backup_id: str):
     drive_service.files().delete(fileId=backup_id).execute()
