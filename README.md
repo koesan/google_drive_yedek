@@ -8,6 +8,8 @@
 
 ☁️ **Professional-grade Google Drive backup and file management solution**
 
+---
+
 [🇬🇧 English](#english) | [🇹🇷 Türkçe](#türkçe)
 
 </div>
