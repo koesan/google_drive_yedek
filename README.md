@@ -1,120 +1,271 @@
-# Automaticli Drive Backup (Otomatik Drive Yedeklemesi)
+<div align="center">
 
-This project provides a set of handy functions for managing files and folders on Google Drive. With it, you can list, delete, upload, and download items making routine backups to Drive quick and painless. It’s especially useful for anyone who needs a simple way to keep their data organized and safely stored in the cloud.
+# Google Drive Backup Manager
 
----
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![Google Drive API](https://img.shields.io/badge/Google%20Drive-API-green.svg)](https://developers.google.com/drive)
+[![Rich](https://img.shields.io/badge/Rich-Terminal-orange.svg)](https://github.com/Textualize/rich)
 
-Bu proje, Google Drive'da dosya ve klasör yönetimini kolaylaştırmak için çeşitli işlevler sunar. Bu araçla dosya ve klasörleri listeleyebilir, silebilir, yükleyebilir ve indirebilirsiniz. Özellikle Google Drive üzerinde düzenli yedekleme yapmayı amaçlayanlar için oldukça kullanışlıdır.
+☁️ **Professional-grade Google Drive backup and file management solution**
 
-# Requirements(Gereksinimler)
+[🇬🇧 English](#english) | [🇹🇷 Türkçe](#türkçe)
 
-1. **Installing the Python libraries (Python kütüphanelerinin kurulması).**
-   
-   ```bash
-   pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib rich
-   ```
-
-2. **Create a service account and key file (.json) in Google Cloud ( Google Cloud’ta servis hesabı ve anahtar dosyası (.json) )**
-   
-   - ****Create a new project or open an existing one**  
-     [https://console.cloud.google.com](https://console.cloud.google.com)
-   
-   - In the left‑hand menu go to **APIs & Services ▸ Library**, search for **Google Drive API**, and click **Enable**.
-   
-   - Still in **APIs & Services**, open **Credentials** and choose **Create credentials ▸ Service account**. Give it a name and click **Done**.
-   
-   - On the row of the new service account, click **︙ Actions ▸ Manage keys ▸ Add key ▸ Create new key ▸ JSON**.
-   
-   - Copy the service account’s e‑mail address (it looks like 
-     *my‑sa@my‑project.iam.gserviceaccount.com*).
-     
-     ---
-   
-   - **Proje oluşturun / mevcut projeyi açın**  
-     [https://console.cloud.google.com](%5Bhttps://console.cloud.google.com%5D(https://console.cloud.google.com))
-   
-   - **Sol menü** - ▸ **APIs & Services - ▸ Library** - ▸ “**Google Drive API**”yi bulun, **Enable** butonuna basın.
-   
-   - **Sol menü** - ▸ **APIs & Services - ▸ Credentials** - ▸ **Create Credentials - ▸ Service account** - ▸ İsim verin, “**Done**”la bitirin.
-   
-   - Oluşan servis hesabının satırında “**︙ Actions**” - ▸ **Manage keys** - ▸ **Add key - ▸ Create new key - ▸ JSON**, indirdiğiniz dosyayı güvenli bir yerde tutun.
-   
-   - Servis hesabının e‑postasını kopyalayın (şu biçimde olur: *my‑sa@my‑project.iam.gserviceaccount.com*).
-     
-     
-
-3. **Prepare the target (parent) folder in Drive (Drive’da hedef (parent) klasörü hazırlayın)**
-   
-   - [In [Google Drive](https://drive.google.com/) create the folder that will hold your backups.
-   
-   - Right‑click the folder and choose **Share**. Leave “General access” set to **Restricted**.
-   
-   - In **Add people and groups**, paste the **service account e‑mail**, give it **Editor** access, and click **Send**.
-   
-   - Open the folder and look at the URL, which has this form:
-     
-     ```
-     https://drive.google.com/drive/folders/1AbC‑DeFGhijkLmNop-
-     ```
-     
-     The final segment (“**1AbC‑DeFGhijkLmNop-**”) is the **folder ID** you’ll supply to the program.
-     
-     ---
-   
-   - [Google Drive’da](https://drive.google.com/) yedeklerin gideceği klasörü oluşturun.
-   
-   - Klasöre sağ tıklayıp **Paylaş** (Share) - ▸ “Genel erişim: Kısıtlı” kalsın.
-   
-   - **Kişi ekle** bölümüne **servis hesabı e‑postanızı** yapıştırın. ***Düzenleyici*** yetkisi verip **Gönder** deyin.
-   
-   - Klasörü açın, adres çubuğundaki URL şu biçimde:
-     
-     ```
-     https://drive.google.com/drive/folders/1AbC‑DeFGhijkLmNop-
-     ```
-     
-     Son kısım (“**1AbC‑DeFGhijkLmNop-**”) klasör ID’sidir. Programı kullanırken bu **ID'yi** girmeniz gerekecek.
-     
-     
-
-**In short**, before you can run the program you need to install the required packages with **pip** and have both the **JSON key file** and the **folder ID** ready.
-
-
-
-**Sonuç olarak** programı kullanmak için öncelikle **Pip** ile gerekli paketleri kurmanız ve elinizde **json** ve **klasör ID** bulunması gerekiyor.
+</div>
 
 ---
 
-# Usage / Kullanım
+## English
 
-#### 1) **Backup / Yedekle**
+## 🇬🇧 
 
-Uploads a local folder to Google Drive. The script creates a new sub‑folder named with the current date & time, then copies everything inside.
+### About This Project
+
+Google Drive Backup Manager is a comprehensive toolkit designed for seamless file and folder management on Google Drive. This professional solution transforms routine backup operations into quick, painless, and reliable processes. Built with enterprise-grade error handling and user-friendly interfaces, it's perfect for individuals and organizations requiring consistent data protection.
+
+The application leverages Google's official Drive API to provide secure, authenticated access to your cloud storage. Whether you need to backup important documents, organize existing files, or maintain synchronized archives, this tool delivers reliable performance with intuitive operation.
+
+### ✨ Core Features
+
+**📤 Intelligent Upload System**
+- Bulk file and folder uploading with progress tracking
+- Automatic directory structure preservation
+- Resume capability for interrupted transfers
+- Smart duplicate detection and handling
+
+**📥 Advanced Download Manager**
+- Selective file and folder downloading
+- Batch download operations with progress indicators
+- Maintain original folder hierarchies during downloads
+- Bandwidth optimization for large transfers
+
+**📋 Comprehensive File Listing**
+- Detailed file and folder inventory with metadata
+- Sorting and filtering capabilities
+- File size, creation date, and modification tracking
+- Easy navigation through complex directory structures
+
+**🗑️ Secure Deletion Operations**
+- Safe file and folder removal with confirmation prompts
+- Bulk deletion with preview capabilities
+- Trash management and recovery options
+- Protection against accidental data loss
+
+### 🔧 Installation & Setup
+
+#### Prerequisites
+- **Python 3.8+** with pip package manager
+- **Google Cloud Platform account** for API access
+- **Google Drive account** for storage operations
+
+#### Required Dependencies
+```bash
+pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib rich
+```
+
+#### Google Cloud Setup
+
+**Step 1: Create a Google Cloud Project**
+1. Navigate to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a new project or select an existing one
+3. Enable billing for the project (required for API access)
+
+**Step 2: Enable Google Drive API**
+1. Go to **APIs & Services → Library**
+2. Search for "Google Drive API"
+3. Click **Enable** to activate the service
+
+**Step 3: Create Service Account**
+1. Navigate to **APIs & Services → Credentials**
+2. Click **Create Credentials → Service Account**
+3. Provide a descriptive name and click **Done**
+
+**Step 4: Generate API Key**
+1. On the service account row, click **Actions (⋮) → Manage keys**
+2. Click **Add Key → Create new key → JSON**
+3. Download and securely store the JSON key file
+
+**Step 5: Setup Drive Folder**
+1. Create a dedicated folder in [Google Drive](https://drive.google.com/)
+2. Right-click the folder and select **Share**
+3. Add the service account email (from the JSON file) as **Editor**
+4. Copy the folder ID from the URL (the part after `/folders/`)
+
+### 🚀 Usage Guide
+
+#### Basic Operations Menu
+When you run the application, you'll see an intuitive menu with these options:
+
+**1. 📤 Backup Files**
+Upload local folders to Google Drive with automatic organization by date and time.
+
+**2. 📋 List Drive Contents**  
+Display all files and folders in your backup directory with detailed information.
+
+**3. 📥 Download Backups**
+Retrieve specific backups or entire directories to your local machine.
+
+**4. 🗑️ Delete Backups**
+Remove unwanted files or folders with safety confirmations.
+
+#### Command Examples
+
+**Upload a Local Folder:**
+The system will prompt you for:
+- Local folder path to backup
+- Target Drive folder ID
+- JSON service account key file location
+
+**Download from Drive:**
+Select from available backups and specify:
+- Source folder/file in Drive
+- Local destination directory
+- Download preferences (files only, folders only, or both)
+
+**List Drive Contents:**
+View detailed information including:
+- File/folder names and types
+- Creation and modification dates
+- File sizes and storage usage
+- Sharing permissions and access levels
+
+### 💡 Advanced Tips
+
+**Folder Organization:** The tool automatically creates timestamped subfolders for each backup, making it easy to track when backups were created.
+
+**Batch Operations:** Take advantage of bulk operations to handle multiple files and folders efficiently.
+
+**Recovery Planning:** Regular use of the list function helps you understand your backup structure and plan recovery strategies.
+
+**Automation Ready:** The tool can be integrated into shell scripts or scheduled tasks for automated backup workflows.
 
 ---
 
-Yerel bir klasörü Google Drive’a yükler. Betik, o anki tarih‑saat adında yeni bir alt klasör açar ve tüm dosyaları buraya kopyalar.
+## Türkçe
 
-#### 2) **List Backups / Yedekleri Listele**
+## 🇹🇷 
 
-Shows every file and folder inside the parent backup directory on Drive, so you can see what’s already stored.
+### Proje Hakkında
+
+Google Drive Yedek Yöneticisi, Google Drive'da sorunsuz dosya ve klasör yönetimi için tasarlanmış kapsamlı bir araç setidir. Bu profesyonel çözüm, rutin yedekleme işlemlerini hızlı, acısız ve güvenilir süreçlere dönüştürür. Kurumsal seviye hata işleme ve kullanıcı dostu arayüzlerle oluşturulan bu araç, tutarlı veri koruması gerektiren bireyler ve organizasyonlar için mükemmeldir.
+
+Uygulama, bulut depolama alanınıza güvenli, kimlik doğrulamalı erişim sağlamak için Google'ın resmi Drive API'sini kullanır. Önemli belgeleri yedeklemeniz, mevcut dosyaları düzenlemeniz veya senkronize arşivler korumanız gerekip gerekmediği fark etmez, bu araç sezgisel işlemle güvenilir performans sunar.
+
+### ✨ Temel Özellikler
+
+**📤 Akıllı Yükleme Sistemi**
+- İlerleme takibi ile toplu dosya ve klasör yükleme
+- Otomatik dizin yapısı korunması
+- Kesintiye uğrayan aktarımlar için devam etme yeteneği
+- Akıllı kopya algılama ve işleme
+
+**📥 Gelişmiş İndirme Yöneticisi**
+- Seçici dosya ve klasör indirme
+- İlerleme göstergeleri ile toplu indirme işlemleri
+- İndirmeler sırasında orijinal klasör hiyerarşilerini koruma
+- Büyük aktarımlar için bant genişliği optimizasyonu
+
+**📋 Kapsamlı Dosya Listeleme**
+- Meta verilerle detaylı dosya ve klasör envanteri
+- Sıralama ve filtreleme yetenekleri
+- Dosya boyutu, oluşturma tarihi ve değişiklik takibi
+- Karmaşık dizin yapılarında kolay gezinme
+
+**🗑️ Güvenli Silme İşlemleri**
+- Onay istekleri ile güvenli dosya ve klasör kaldırma
+- Önizleme yetenekleri ile toplu silme
+- Çöp kutusu yönetimi ve kurtarma seçenekleri
+- Yanlışlıkla veri kaybına karşı koruma
+
+### 🔧 Kurulum ve Ayarlar
+
+#### Ön Gereksinimler
+- **Python 3.8+** ve pip paket yöneticisi
+- **Google Cloud Platform hesabı** API erişimi için
+- **Google Drive hesabı** depolama işlemleri için
+
+#### Gerekli Bağımlılıklar
+```bash
+pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib rich
+```
+
+#### Google Cloud Kurulumu
+
+**Adım 1: Google Cloud Projesi Oluşturma**
+1. [Google Cloud Console](https://console.cloud.google.com)'a gidin
+2. Yeni bir proje oluşturun veya mevcut olanı seçin
+3. Proje için faturalamayı etkinleştirin (API erişimi için gerekli)
+
+**Adım 2: Google Drive API'yi Etkinleştirme**
+1. **APIs & Services → Library**'ye gidin
+2. "Google Drive API" aratın
+3. Hizmeti etkinleştirmek için **Enable**'a tıklayın
+
+**Adım 3: Servis Hesabı Oluşturma**
+1. **APIs & Services → Credentials**'a gidin
+2. **Create Credentials → Service Account**'a tıklayın
+3. Açıklayıcı bir isim verin ve **Done**'a tıklayın
+
+**Adım 4: API Anahtarı Üretme**
+1. Servis hesabı satırında **Actions (⋮) → Manage keys**'e tıklayın
+2. **Add Key → Create new key → JSON**'a tıklayın
+3. JSON anahtar dosyasını indirin ve güvenli bir şekilde saklayın
+
+**Adım 5: Drive Klasörü Kurulumu**
+1. [Google Drive](https://drive.google.com/)'da özel bir klasör oluşturun
+2. Klasöre sağ tıklayın ve **Share**'i seçin
+3. Servis hesabı e-postasını (JSON dosyasından) **Editor** olarak ekleyin
+4. URL'den klasör ID'sini kopyalayın (`/folders/` sonrası kısım)
+
+### 🚀 Kullanım Kılavuzu
+
+#### Temel İşlemler Menüsü
+Uygulamayı çalıştırdığınızda, şu seçenekleri içeren sezgisel bir menü göreceksiniz:
+
+**1. 📤 Dosyaları Yedekle**
+Yerel klasörleri tarih ve saat ile otomatik organizasyonla Google Drive'a yükleyin.
+
+**2. 📋 Drive İçeriğini Listele**
+Yedek dizininizdeki tüm dosya ve klasörleri detaylı bilgilerle görüntüleyin.
+
+**3. 📥 Yedekleri İndir**
+Belirli yedekleri veya tüm dizinleri yerel makinenize alın.
+
+**4. 🗑️ Yedekleri Sil**
+Güvenlik onaylarıyla istenmeyen dosya veya klasörleri kaldırın.
+
+#### Komut Örnekleri
+
+**Yerel Klasör Yükleme:**
+Sistem sizden şunları isteyecek:
+- Yedeklenecek yerel klasör yolu
+- Hedef Drive klasör ID'si
+- JSON servis hesabı anahtar dosya konumu
+
+**Drive'dan İndirme:**
+Mevcut yedekler arasından seçim yapın ve belirtin:
+- Drive'daki kaynak klasör/dosya
+- Yerel hedef dizini
+- İndirme tercihleri (sadece dosyalar, sadece klasörler veya her ikisi)
+
+**Drive İçeriğini Listeleme:**
+Şunları içeren detaylı bilgileri görüntüleyin:
+- Dosya/klasör adları ve türleri
+- Oluşturma ve değişiklik tarihleri
+- Dosya boyutları ve depolama kullanımı
+- Paylaşım izinleri ve erişim seviyeleri
+
+### 💡 Gelişmiş İpuçları
+
+**Klasör Organizasyonu:** Araç her yedekleme için otomatik olarak zaman damgalı alt klasörler oluşturur, yedeklemelerin ne zaman oluşturulduğunu takip etmeyi kolaylaştırır.
+
+**Toplu İşlemler:** Birden fazla dosya ve klasörü verimli bir şekilde işlemek için toplu işlemlerden faydalanın.
+
+**Kurtarma Planlaması:** Liste fonksiyonunun düzenli kullanımı, yedek yapınızı anlamanıza ve kurtarma stratejileri planlamanıza yardımcı olur.
+
+**Otomasyon Için Hazır:** Araç, otomatik yedekleme iş akışları için shell scriptlerine veya zamanlanmış görevlere entegre edilebilir.
 
 ---
 
-Drive’daki ana yedek klasörünün içindeki dosya ve klasörleri gösterir; hangi yedeklerin mevcut olduğunu görürsünüz.
+### 📄 License
 
-#### 3) **Download Backup / Yedek İndir**
-
-Pulls a backup (or the whole backup directory) from Drive down to your computer, preserving the original folder structure.
-
----
-
-Seçtiğiniz yedeği (ya da tüm klasörü) Drive’dan bilgisayarınıza indirir, klasör yapısını bozmadan kopyalar.
-
-#### 4) **Delete Backup / Yedek Sil**
-
-Lets you pick individual files/folders or everything at once and remove them from Drive.
-
----
-
-Tek tek dosya/klasör seçerek ya da hepsini birden Drive’dan silmenizi sağlar.
+This project is open source and available under the MIT License.
